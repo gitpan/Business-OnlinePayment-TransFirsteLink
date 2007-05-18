@@ -8,6 +8,7 @@ WriteMakefile(
     PREREQ_PM    => {
         Business::OnlinePayment        => '3',
         Business::OnlinePayment::HTTPS => '0.05',
+        Tie::IxHash                    => '0',
     },
     (
         $] >= 5.005

@@ -3,10 +3,11 @@ package Business::OnlinePayment::TransFirsteLink;
 use strict;
 use vars qw($VERSION $DEBUG %error_messages);
 use Carp qw(carp croak);
+use Tie::IxHash;
 
 use base qw(Business::OnlinePayment::HTTPS);
 
-$VERSION = '0.01';
+$VERSION = '0.02';
 $VERSION = eval $VERSION;
 $DEBUG   = 0;
 
@@ -325,8 +326,8 @@ sub submit {
     my %content = $self->content;
 
     my %required;
-    $required{CC_20} = [ qw( ePayAccountNum Password OrderNumber
-                             TransactionAmount AccountNumber ExpirationDate
+    $required{CC_20} = [ qw( ePayAccountNum Password OrderNum
+                             TransactionAmount CardAccountNum ExpirationDate
                              MerchantCustServNum ) ];
     $required{CC_30} = [ qw( ePayAccountNum Password TransactionCode OrderNum
                              TransactionAmount CardAccountNum ExpirationDate
@@ -336,7 +337,7 @@ sub submit {
                              ReferenceNum ) ];
     $required{ECHECK_20} = [ qw( ePayAccountNum Password AccountNumber
                                  RoutingNumber DollarAmount OrderNumber
-                                 CustomerNumber ) ];
+                                 CustomerNumber CustomerName ) ];
     $required{ECHECK_32} = [ qw( ePayAccountNum Password OrderNumber
                                  AccountNumber RoutingNumber CheckNumber
                                  DollarAmount CustomerName CustomerAddress
@@ -406,6 +407,7 @@ sub submit {
 
         RoutingNumber       => 'routing_code',
         AccountNumber       => \$account_number,
+        AccountNum          => \$account_number,
         CheckNumber         => \$check_number,
 
         CardHolderName      => 'name',
@@ -431,14 +433,20 @@ sub submit {
         ReferenceNum        => 'order_number'
     );
 
-    my %params = $self->get_fields( @{$required{$type_action}},
-                                    @{$optional{$type_action}},
-                                  );
+    tie my %params, 'Tie::IxHash',
+      $self->get_fields( @{$required{$type_action}},
+                         @{$optional{$type_action}},
+                       );
 
     $params{TestTransaction}='Y' if $self->test_transaction;
 
     $params{InstallmentNum} = $params{InstallmentOf} = '01'
       unless ($params{InstallmentNum} && $params{InstallmentOf}); 
+
+    if ($self->transaction_type() eq 'ECHECK') {
+      delete $params{InstallmentNum};
+      delete $params{InstallmentOf};
+    }
 
     if ( $type_action eq "CC_30" || $type_action eq "CC_32" ) {
       $self->path($self->path."elink/authpd.asp");
@@ -468,13 +476,14 @@ sub submit {
     $self->required_fields(@{$required{$type_action}});
 
     my $status ='';
+    my @rarray = ();
 
     if ( $type_action eq "CC_30" || $type_action eq "CC_32" ) {
       my ($format,$account,$tcode,$seq,$moi,$cardnum,$exp,$authamt,$authdate,
           $authtime,$tstat,$custnum,$ordernum,$refnum,$rcode,$authsrc,$achar,
           $transid,$vcode,$sic,$country,$avscode,$storenum,$cvv2resp,$cavvcode,
           $crossrefnum,$etstat,$cavvresponse,$xid,$eci,@junk)
-         = split '\|', $page;
+        = split '\|', $page;
 
       # AVS and CVS values may be set on success or failure
       $self->avs_code($avscode);
@@ -485,30 +494,52 @@ sub submit {
       $self->junk( \@junk );
       $self->error_message($error_messages{$status});
 
+
     } elsif ( $type_action eq "CC_61" ) {
-      my ($format,$account,$tcode,$voidamt,$seq,$voiddate,$voidtime,$tstat,
+      $self->avs_code('');
+      $self->cvv2_response('');
+      my ($format,$account,$tcode,$seq,$voiddate,$voidtime,$tstat, # flaky docs
           $refnum,$filler1,$filler2,$filler3,$etstat,@junk)
          = split '\|', $page;
       $self->result_code( $status = $etstat );
       $self->order_number( $refnum );
+      $self->authorization('');
       $self->junk( \@junk );
       $self->error_message($error_messages{$status});
 
     } elsif ( $type_action eq "CC_20" ) {
+      $self->avs_code('');
+      $self->cvv2_response('');
       my ($format,$account,$tcode,$seq,$moi,$authamt,$authdate,$authtime,
           $tstat,$refnum,$crossrefnum,$custnum,$ordernum,$etstat,@junk)
          = split '\|', $page;
       $self->result_code( $status = $etstat );
       $self->order_number( $refnum );
+      $self->authorization('');
       $self->junk( \@junk );
       $self->error_message($error_messages{$status});
 
-    } elsif ( $type_action eq "ECHECK_32" || $type_action eq "ECHECK_20" ) {
+    } elsif ( $type_action eq "ECHECK_32" ) {
       my ($responsecode,$response,$transactionid,$note,$errors,@junk)
          = split '\|', $page;
-      # AVS and CVS values may be set on success or failure
+      $self->avs_code('');
+      $self->cvv2_response('');
       $self->result_code( $status = $responsecode );
       $self->order_number( $transactionid );
+      $self->authorization('');
+      $errors = $errors ? $errors : '';
+      $self->error_message("$response $errors");
+      $self->junk( \@junk );
+
+    } elsif ( $type_action eq "ECHECK_20" ) {
+      my ($response,$transactionid,$note,$errors,@junk) # very flaky docs
+         = split '\|', $page;
+      $self->avs_code('');
+      $self->cvv2_response('');
+      $self->result_code( $status = $response );
+      $self->order_number( $transactionid );
+      $self->authorization('');
+      $errors = $errors ? $errors : '';
       $self->error_message("$response $errors");
       $self->junk( \@junk );
 
@@ -516,7 +547,7 @@ sub submit {
       croak "can't interpret response for unexpected type and action $type_action";
     }
 
-    if ( $resp eq "200" && ($status eq "000" || $status eq "011" || $status eq "085" || $status eq "0P0" || $status eq "P00") ) {
+    if ( $resp eq "200" && ($status eq "000" || $status eq "011" || $status eq "085" || $status eq "0P0" || $status eq "P00" || $status eq 'ACCEPTED') ) {
         $self->is_success(1);
     }
     else {
