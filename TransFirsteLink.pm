@@ -7,7 +7,7 @@ use Tie::IxHash;
 
 use base qw(Business::OnlinePayment::HTTPS);
 
-$VERSION = '0.02';
+$VERSION = '0.03';
 $VERSION = eval $VERSION;
 $DEBUG   = 0;
 
@@ -547,7 +547,7 @@ sub submit {
       croak "can't interpret response for unexpected type and action $type_action";
     }
 
-    if ( $resp eq "200" && ($status eq "000" || $status eq "011" || $status eq "085" || $status eq "0P0" || $status eq "P00" || $status eq 'ACCEPTED') ) {
+    if ( $resp =~ /^(HTTP\S+ )?200/ && ($status eq "000" || $status eq "011" || $status eq "085" || $status eq "0P0" || $status eq "P00" || $status eq 'ACCEPTED') ) {
         $self->is_success(1);
     }
     else {
