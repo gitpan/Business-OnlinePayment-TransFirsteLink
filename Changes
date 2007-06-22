@@ -1,5 +1,9 @@
 Revision history for Perl extension Business::OnlinePayment::TransFirsteLink.
 
+0.04  Thu Jun 21 15:25:50 EDT 2007
+        - don't die when we don't know how to perform the transaction
+          just fail instead
+
 0.03  Thu May 31 20:04:17 EDT 2007
         - cope with discrepancy in second array element from B:OP:HTTPS
           between Net::SSLeay and Crypt::SSLeay/LWP::UserAgent

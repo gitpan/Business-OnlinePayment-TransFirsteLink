@@ -7,7 +7,7 @@ use Tie::IxHash;
 
 use base qw(Business::OnlinePayment::HTTPS);
 
-$VERSION = '0.03';
+$VERSION = '0.04';
 $VERSION = eval $VERSION;
 $DEBUG   = 0;
 
@@ -375,8 +375,12 @@ sub submit {
 
     my $type_action = $self->transaction_type(). '_'. $content{TransactionCode};
     unless ( exists($required{$type_action}) ) {
-        croak( "TransFirst eLink can't (yet?) handle transaction type: ".
-              "$content{action} on " . $self->transaction_type() );
+#        croak( "TransFirst eLink can't (yet?) handle transaction type: ".
+#              "$content{action} on " . $self->transaction_type() );
+      $self->error_message("TransFirst eLink can't handle transaction type: ".
+        "$content{action} on " . $self->transaction_type() );
+      $self->is_success(0);
+      return;
     }
 
     my $expdate_mmyy = $self->expdate_mmyy( $content{"expiration"} );
