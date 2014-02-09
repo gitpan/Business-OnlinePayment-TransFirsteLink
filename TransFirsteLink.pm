@@ -7,7 +7,7 @@ use Tie::IxHash;
 
 use base qw(Business::OnlinePayment::HTTPS);
 
-$VERSION = '0.04';
+$VERSION = '0.05';
 $VERSION = eval $VERSION;
 $DEBUG   = 0;
 
@@ -384,8 +384,12 @@ sub submit {
     }
 
     my $expdate_mmyy = $self->expdate_mmyy( $content{"expiration"} );
+
     my $zip          = $content{'zip'};
     $zip =~ s/[^[:alnum:]]//g;
+
+    my $phone = $content{'phone'};
+    $phone =~ s/\D//g;
 
     my $merchantcustservnum = $self->merchantcustservnum;
     my $account_number = $self->transaction_type() eq 'CC'
@@ -426,8 +430,8 @@ sub submit {
         CustomerZip         => \$zip,          # 'zip' with non-alnums removed
         CardHolderEmail     => 'email',
         CustomerEmail       => 'email',
-        CardHolderPhone     => 'phone',
-        CustomerPhone       => 'phone',
+        CardHolderPhone     => \$phone,
+        CustomerPhone       => \$phone,
         CustomerNum         => 'customer_id',
         CustomerNumber      => 'customer_id',
         CardHolderCountry   => 'country',
@@ -729,7 +733,7 @@ from content(%content):
       CardHolderState   => 'state',
       CardHolderZip     => \$zip,       # 'zip' with non-alphanumerics removed
       CardHolderEmail   => 'email',
-      CardHolderPhone   => 'phone',
+      CardHolderPhone   => 'phone',     # with non-digits removed
       CardHolderCountry => 'country',
 
       CustomerName      => 'name',
@@ -738,7 +742,7 @@ from content(%content):
       CustomerState     => 'state',
       CustomerZip       => \$zip,       # 'zip' with non-alphanumerics removed
       CustomerEmail     => 'email',
-      CustomerPhone     => 'phone',
+      CustomerPhone     => 'phone',     # with non-digits removed
 
       PaymentDescriptor => 'description',
 
@@ -800,7 +804,9 @@ This module implements an interface to the TransFirst eLink API version
 
 =head1 AUTHORS
 
-Jeff Finucane <transfirst@weasellips.com>
+Original author: Jeff Finucane
+
+Current maintainer: Ivan Kohler <ivan-transfirst@freeside.biz>
 
 Based on Business::OnlinePayment::PayflowPro written by Ivan Kohler
 and Phil Lobbes.
